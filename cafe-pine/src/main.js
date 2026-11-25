@@ -41,8 +41,8 @@ $('#main').innerHTML = `
   </div>`).join('')}
 </section>
 
-<section id="clearing" aria-labelledby="h-blend">
-  <div class="fx panel left" data-win="2.28,3.02" data-pose="2.7">
+<section id="cabin" aria-labelledby="h-blend">
+  <div class="fx panel left" data-win="2.1,2.62" data-pose="2.3">
     <span class="label">${esc(S.blend.label)}</span>
     <h2 id="h-blend">${esc(S.blend.title)}</h2>
     <p>${esc(S.blend.body)}</p>
@@ -52,8 +52,18 @@ $('#main').innerHTML = `
   </div>
 </section>
 
+<section id="inside" aria-labelledby="h-inside">
+  <div class="fx panel left" data-win="3.32,4.04" data-pose="3.62">
+    <span class="label">${esc(S.inside.label)}</span>
+    <h2 id="h-inside">${esc(S.inside.title)}</h2>
+    <p>${esc(S.inside.body)}</p>
+    <dl class="spec">${S.inside.details.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
+    <p class="tip">${esc(S.inside.hint)}</p>
+  </div>
+</section>
+
 <section id="menu" aria-labelledby="h-menu">
-  <div class="fx panel left brew" data-win="3.1,4.02" data-pose="3.6">
+  <div class="fx panel left brew" data-win="4.14,5.0" data-pose="4.55">
     <span class="label">${esc(S.menu.label)}</span>
     <h2 id="h-menu">${esc(S.menu.title)}</h2>
     <ul class="drinks" role="radiogroup" aria-labelledby="h-menu">
@@ -67,11 +77,12 @@ $('#main').innerHTML = `
       <div class="layers" id="layers" aria-hidden="true"></div>
       <button class="btn" id="addTray">Add to tray</button>
     </div>
+    <p class="tip">Drag the mug to spin it · tap for steam</p>
   </div>
 </section>
 
 <section id="visit" aria-labelledby="h-visit">
-  <div class="fx panel right" data-win="4.25,4.9" data-pose="4.6">
+  <div class="fx panel right" data-win="5.25,5.94" data-pose="5.62">
     <span class="label">${esc(S.visit.label)}</span>
     <h2 id="h-visit">${esc(S.visit.title)}</h2>
     <p>${esc(S.visit.body)}</p>
@@ -122,13 +133,14 @@ function applyMotion() {
   motionBtn.textContent = reduced ? 'Motion off' : 'Motion on';
   document.documentElement.classList.toggle('reduced', reduced);
   if (reduced && lenis) { lenis.destroy(); lenis = null; }
-  if (!reduced && !lenis) lenis = new Lenis({ lerp: 0.1, smoothWheel: true, wheelMultiplier: 0.9 });
+  if (!reduced && !lenis && !new URLSearchParams(location.search).has('still')) lenis = new Lenis({ lerp: 0.1, smoothWheel: true, wheelMultiplier: 0.9 });
 }
 let lenis = null;
 motionBtn.addEventListener('click', () => { reduced = !reduced; store.set('pine-motion', reduced ? 'reduced' : 'full'); applyMotion(); });
 
 // ---------- scroll model ----------
-const sectionEls = ['#canopy', '#descent', '#clearing', '#menu', '#visit'].map((s) => $(s));
+const sectionEls = ['#canopy', '#descent', '#cabin', '#inside', '#menu', '#visit'].map((s) => $(s));
+const LAST = sectionEls.length - 1;
 let tops = [], heights = [], maxScroll = 1, rawMax = 5, vh = innerHeight;
 function measure() {
   vh = innerHeight;
@@ -145,12 +157,12 @@ function rawT(y) {
 }
 function tFromScroll(y) {
   const r = rawT(y);
-  if (r <= 4) return r;
-  return Math.min(5, 4 + (r - 4) / Math.max(0.01, rawMax - 4));
+  if (r <= LAST) return r;
+  return Math.min(LAST + 1, LAST + (r - LAST) / Math.max(0.01, rawMax - LAST));
 }
 function scrollForT(t) {
-  if (t > 4) t = 4 + (t - 4) * (rawMax - 4);
-  const i = Math.min(4, Math.floor(t));
+  if (t > LAST) t = LAST + (t - LAST) * (rawMax - LAST);
+  const i = Math.min(LAST, Math.floor(t));
   return Math.min(maxScroll, tops[i] + (t - i) * heights[i]);
 }
 function scrollToT(t) {
@@ -158,7 +170,7 @@ function scrollToT(t) {
   if (lenis) lenis.scrollTo(y, { duration: 1.6 });
   else window.scrollTo(0, y);
 }
-const anchorT = { '#canopy': 0, '#descent': 1.2, '#clearing': 2.68, '#menu': 3.6, '#visit': 4.6, '#trailhead': 5 };
+const anchorT = { '#canopy': 0, '#descent': 1.2, '#cabin': 2.3, '#inside': 3.62, '#menu': 4.55, '#visit': 5.62, '#trailhead': 6 };
 document.addEventListener('click', (e) => {
   const a = e.target.closest('a[href^="#"]');
   if (!a) return;
@@ -284,13 +296,31 @@ soundBtns.forEach((b) => b.addEventListener('click', () => {
 
 // ---------- 3D ----------
 const canvas = $('#scene');
-const mobile = innerWidth < 768;
 let scene = null;
-try {
-  scene = createScene(canvas, { mobile });
-} catch (err) {
-  document.documentElement.classList.add('no-webgl');
-  console.info('WebGL unavailable, showing the static poster.', err?.message || '');
+const forced = new URLSearchParams(location.search).get('tier');
+let tier = ['high', 'medium', 'low'].includes(forced) ? forced : innerWidth < 768 ? 'low' : innerWidth < 1200 ? 'medium' : 'high';
+const veil = $('#veil'), veilBar = $('#veilBar');
+async function boot() {
+  try {
+    scene = await createScene(canvas, { tier, onProgress: (p) => { veilBar.style.transform = `scaleX(${p.toFixed(3)})`; } });
+    selectDrink(current, true);
+    probeStart = performance.now(); probeFrames = 0;
+  } catch (err) {
+    document.documentElement.classList.add('no-webgl');
+    console.info('WebGL unavailable, showing the static poster.', err?.message || '');
+  }
+  veil.classList.add('done');
+  setTimeout(() => veil.remove(), 700);
+}
+let probeStart = 0, probeFrames = 0;
+function probe(ms) {
+  if (!scene || !probeStart || forced) return;
+  probeFrames++;
+  if (ms - probeStart > 1500) {
+    const fps = (probeFrames * 1000) / (ms - probeStart);
+    probeStart = 0;
+    if (tier === 'high' && fps < 45) { tier = 'medium'; scene.setTier('medium'); console.info('Cafe Pine · quality lowered to medium at', fps.toFixed(0), 'fps'); }
+  }
 }
 
 // pointer
@@ -310,15 +340,17 @@ canvas.addEventListener('pointermove', (e) => {
   }
   if (e.timeStamp - lastHover > 90) {
     lastHover = e.timeStamp;
-    let hot = false;
-    if (t > 2.2 && t < 4.1) hot = scene.hitMug(e.clientX, e.clientY);
-    else if (t < 2.1 && e.pointerType === 'mouse') hot = !!scene.hitTree(e.clientX, e.clientY);
-    canvas.style.cursor = hot ? (t > 2.2 ? 'grab' : 'pointer') : night > 0.5 ? 'crosshair' : '';
+    let cur = '';
+    if (inMugZone() && scene.hitMug(e.clientX, e.clientY)) cur = 'grab';
+    else if (inFireZone() && scene.hitFire(e.clientX, e.clientY)) cur = 'pointer';
+    else if (t < 2.05 && e.pointerType === 'mouse' && scene.hitTree(e.clientX, e.clientY)) cur = 'pointer';
+    else if (night > 0.5) cur = 'crosshair';
+    canvas.style.cursor = cur;
   }
 });
 canvas.addEventListener('pointerdown', (e) => {
   if (!scene) return;
-  const mug = t > 2.2 && t < 4.1 && scene.hitMug(e.clientX, e.clientY);
+  const mug = inMugZone() && scene.hitMug(e.clientX, e.clientY);
   drag = { x: e.clientX, y: e.clientY, sx: e.clientX, sy: e.clientY, time: e.timeStamp, moved: 0, mug, vel: 0 };
   if (mug) { canvas.setPointerCapture(e.pointerId); canvas.style.cursor = 'grabbing'; }
 });
@@ -329,28 +361,34 @@ function endDrag(e, cancelled) {
   if (d.mug) { scene.spinMug(clamp(d.vel, -14, 14)); canvas.style.cursor = 'grab'; }
   if (cancelled || d.moved > 8) return;
   if (d.mug) { scene.puff(now, 12); return; }
-  if (t < 2.1) {
-    const hit = scene.hitTree(e.clientX, e.clientY);
-    if (hit) scene.shakeTree(hit, now);
+  if (inFireZone() && scene.hitFire(e.clientX, e.clientY)) { scene.stoke(now); return; }
+  if (t < 2.05) {
+    const tree = scene.hitTree(e.clientX, e.clientY);
+    if (tree) scene.shakeTree(tree, now);
   } else if (night > 0.5) scene.burst(e.clientX, e.clientY, now);
 }
+const inMugZone = () => t > 4.14 && t < 5.0;
+const inFireZone = () => t > 3.25 && t < 4.14;
 canvas.addEventListener('pointerup', (e) => endDrag(e, false));
 canvas.addEventListener('pointercancel', (e) => endDrag(e, true));
 
 // ---------- frame loop ----------
-const altEl = $('#alt'), fillEl = $('#trailFill'), nameEl = $('#trailName');
-const names = ['Canopy', 'Descent', 'Clearing', 'Brew bar', 'After dark', 'Trailhead'];
+const altEl = $('#alt'), fillEl = $('#trailFill'), nameEl = $('#trailName'), unitEl = $('#altUnit');
+let lastUnit = 'm';
+const names = ['Canopy', 'Descent', 'Cabin', 'Inside', 'Brew bar', 'After dark', 'Trailhead'];
 let lastName = '', lastAlt = '', running = true, rafId = 0;
 let snapT = null, fadeUntil = 0;
 const perf = { frames: 0, since: performance.now(), fps: 0, samples: [] };
-window.__pine = { perf, get t() { return t; }, scrollForT, scrollToT, info: () => scene?.info() };
+window.__pine = { perf, get t() { return t; }, get ready() { return !!scene; },
+  renderAt(tt, ms) { window.scrollTo(0, scrollForT(tt)); frame(ms ?? performance.now()); return t; }, scrollForT, scrollToT, info: () => scene?.info() };
 
+const still = new URLSearchParams(location.search).has('still');
 function frame(ms) {
-  rafId = requestAnimationFrame(frame);
+  if (!still) rafId = requestAnimationFrame(frame);
   if (lenis) lenis.raf(ms);
   const now = ms / 1000;
   t = tFromScroll(window.scrollY);
-  night = smooth(3.92, 4.45, t);
+  night = smooth(5.02, 5.45, t);
 
   // panels: opacity is a pure function of t
   let best = null;
@@ -380,18 +418,20 @@ function frame(ms) {
   parallax.x += (ptr.x - parallax.x) * 0.06;
   parallax.y += (ptr.y - parallax.y) * 0.06;
 
-  let alt = 34 - t * 7;
+  let alt = Math.max(0, 31 - t * 14);
   if (scene) {
-    const out = scene.update({ t: poseT, now, night: reduced ? smooth(3.92, 4.45, poseT) : night, parallax, reduced, dragging: !!drag?.mug });
-    alt = out.alt;
+    const out = scene.update({ t: poseT, now, night: reduced ? smooth(5.02, 5.45, poseT) : night, parallax, reduced, dragging: !!drag?.mug });
+    alt = out.value;
+    if (out.unit !== lastUnit) { unitEl.textContent = out.unit; lastUnit = out.unit; }
   }
   const a = alt.toFixed(1);
   if (a !== lastAlt) { altEl.textContent = a; lastAlt = a; }
-  fillEl.style.height = `${(t / 5) * 100}%`;
-  const nm = names[Math.min(5, Math.floor(t + 0.001))];
+  fillEl.style.height = `${(t / 6) * 100}%`;
+  const nm = names[Math.min(6, Math.floor(t + 0.001))];
   if (nm !== lastName) { nameEl.textContent = nm; lastName = nm; }
   audio.setNight(night);
 
+  probe(ms);
   perf.frames++;
   if (ms - perf.since > 500) {
     perf.fps = (perf.frames * 1000) / (ms - perf.since);
@@ -412,3 +452,4 @@ measure();
 renderTray();
 selectDrink(current, true);
 rafId = requestAnimationFrame(frame);
+boot();

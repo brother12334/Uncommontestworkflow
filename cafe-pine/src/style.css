@@ -122,9 +122,10 @@ main section { position: relative; padding: 0 var(--gutter); }
 /* sections are scroll spacers; copy panels are fixed and fade as a function of scroll */
 #canopy { height: 100vh; }
 #descent { height: 240vh; }
-#clearing { height: 160vh; }
-#menu { height: 200vh; }
-#visit { height: 160vh; }
+#cabin { height: 200vh; }
+#inside { height: 220vh; }
+#menu { height: 220vh; }
+#visit { height: 180vh; }
 
 .fx {
   position: fixed; z-index: 3;
@@ -291,3 +292,17 @@ footer.foot {
 @media (prefers-reduced-motion: reduce) {
   .btn, .tray, .toast, .tray-btn span { transition: none; }
 }
+
+/* loading veil */
+.veil {
+  position: fixed; inset: 0; z-index: 100;
+  display: grid; place-items: center;
+  background: var(--bg);
+  transition: opacity .6s var(--ease), visibility .6s;
+}
+.veil.done { opacity: 0; visibility: hidden; }
+.veil-in { display: grid; gap: .8rem; justify-items: center; }
+.veil-name { font: 800 clamp(2.4rem, 6vw, 4rem)/1 var(--display); letter-spacing: -0.04em; }
+.veil-sub { font: 500 12px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.veil-track { width: 180px; height: 2px; background: var(--line); overflow: hidden; }
+.veil-track i { display: block; height: 100%; background: var(--ember); transform: scaleX(0); transform-origin: left; transition: transform .2s linear; }

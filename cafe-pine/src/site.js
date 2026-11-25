@@ -12,23 +12,23 @@ export const SITE = {
     intro: 'A small roastery and cafe, twelve minutes up the trail from the road. Scroll down through the trees.',
     ctaPrimary: { label: 'See the brew bar', href: '#menu' },
     ctaSecondary: { label: 'Find us', href: '#visit' },
-    hint: 'Scroll to descend  ·  click a tree to shake it',
+    hint: 'Scroll to walk down to the cabin  ·  click a tree to shake it',
   },
 
   descent: [
     {
-      label: '22 m · the canopy',
+      label: '24 m · the canopy',
       title: 'Roasted with the door open.',
       body: 'We roast twice a week in a 5 kg drum, in small batches, with the door open to the trees. You can smell it from the trailhead on Tuesdays and Fridays.',
       tip: 'Click a pine to shake loose a cone',
     },
     {
-      label: '9 m · the trunks',
+      label: '10 m · the trunks',
       title: 'Beans from people we know.',
       body: 'Three farms, two continents, no middlemen we haven\'t had dinner with. We buy a whole harvest at a time, and when it\'s gone the menu changes.',
     },
     {
-      label: '2 m · the floor',
+      label: '0 m · the drive',
       title: 'Spring water, slow fire.',
       body: 'Our water comes from the spring below the cabin and is filtered once. Pour-overs are made by hand, one cup at a time, which is why the line is sometimes long. Bring a book.',
     },
@@ -45,7 +45,20 @@ export const SITE = {
       ['Roast', 'Medium, 11 min drop'],
       ['Bag', '340 g · $19'],
     ],
-    hint: 'Drag the mug to spin it · tap for steam',
+    hint: 'Up the steps and through the door, keep scrolling',
+  },
+
+  inside: {
+    label: 'Inside',
+    title: 'Stay a while.',
+    body: 'One big room under the beams: two old leather sofas, a pool table nobody is very good at, and a fire from October to May.',
+    details: [
+      ['Wi-Fi', 'Ask at the counter'],
+      ['Quiet hours', 'Weekdays 6:30–9:00'],
+      ['Pool table', 'Free, winner racks'],
+      ['Dogs', 'Welcome on the deck'],
+    ],
+    hint: 'Click the fire to stoke it',
   },
 
   menu: {
@@ -100,7 +113,7 @@ export const SITE = {
       { day: 'Saturday', d: 6, open: '07:30', close: '18:00' },
       { day: 'Sunday', d: 0, open: '07:30', close: '18:00' },
     ],
-    hint: 'Move your pointer to call the fireflies · click to release more',
+    hint: 'Move your pointer over the lawn to call the fireflies · click to release more',
   },
 
   footer: {
