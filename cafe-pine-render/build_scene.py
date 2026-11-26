@@ -307,7 +307,7 @@ def build():
     M['soot'] = flat('soot', '#0E0C0B', 1.0)
     M['char'] = char_material()
     M['flame'] = flame_material()
-    M['glaze'] = flat('glaze', '#284232', 0.32, coat=0.6)
+    M['glaze'] = flat('glaze', '#1F3A2A', 0.3, coat=0.7)
     M['clay'] = flat('clay_rim', '#D9C7A8', 0.6)
     M['inner'] = flat('glaze_inner', '#E6DCCB', 0.25, coat=0.4)
     M['shade'] = flat('lamp_shade', '#F2E6D0', 0.9, emit='#FFC98A', emit_str=6.0)
@@ -1361,7 +1361,7 @@ SHOTS = {
     'canopy': ((6, 34, 40), (0, 12, 4), 26, None, 'day', 0),
     'cabin': ((-9.6, 1.75, 16.5), (0.6, 3.3, 1.5), 30, None, 'day', 0),
     'inside': ((-3.0, 3.05, 2.9), (1.0, 2.25, -3.4), 18, None, 'day', 95),
-    'brew': ((MUG[0] - 0.4, MUG[1] + 0.22, MUG[2] + 0.12), (MUG[0], MUG[1] + 0.06, MUG[2]), 50, 2.0, 'day', 95),
+    'brew': ((MUG[0] - 0.27, MUG[1] + 0.33, MUG[2] + 0.1), (MUG[0], MUG[1] + 0.085, MUG[2]), 55, 2.8, 'day', 95),
     'night': ((-10.5, 1.8, 18), (0.5, 3.4, 1.5), 30, None, 'night', 0),
 }
 
