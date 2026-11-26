@@ -1354,6 +1354,13 @@ def build_lights(col):
     so = bpy.data.objects.new('L_sun', sun); col.objects.link(so)
     d = P(-0.55, 0.5, 0.67).normalized()  # direction toward the sun: front-left, 30 deg up
     so.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
+    # warm room glow behind the windows for the night shot (invisible to camera)
+    for i, (x, y, z, rz) in enumerate(((-1.75, F + 1.5, Z1 - 0.4, 0), (-6.5, F + 1.45, WZ1 - 0.4, 0), (0, 5.6, Z1 - 0.4, 0), (1.3, F + 1.2, Z1 - 0.5, 0))):
+        Lw = bpy.data.lights.new(f'L_win{i}', 'AREA'); Lw.energy = 0; Lw.size = 1.4; Lw.color = lin('#FFB070')[:3]
+        ow = bpy.data.objects.new(f'L_win{i}', Lw); ow.location = P(x, y, z); ow.rotation_euler = (math.radians(-90), 0, 0)
+        ow.visible_camera = False; col.objects.link(ow)
+    moon = bpy.data.lights.new('L_moon', 'SUN'); moon.energy = 0; moon.angle = math.radians(0.6); moon.color = lin('#9DB4D8')[:3]
+    mo = bpy.data.objects.new('L_moon', moon); mo.rotation_euler = (math.radians(35), 0, math.radians(-140)); col.objects.link(mo)
     # soft fill bouncing off the ceiling, as a room lit by several lamps would have
     A_ = bpy.data.lights.new('L_fill', 'AREA'); A_.energy = 160; A_.size = 4.0; A_.color = lin('#FFE0C0')[:3]
     o = bpy.data.objects.new('L_fill', A_); o.location = P(0.5, F + 2.6, -2.0); o.rotation_euler = (math.pi, 0, 0); col.objects.link(o)
@@ -1389,11 +1396,14 @@ def apply_shot(name, cam, tgt, door):
     setup_world(world)
     night = world == 'night'
     bpy.data.objects['L_sun'].data.energy = 0 if night else 3.2
+    bpy.data.objects['L_moon'].data.energy = 0.12 if night else 0
+    for i in range(4):
+        bpy.data.objects[f'L_win{i}'].data.energy = (90 if i < 3 else 40) if night else 0
     for n, e in (('L_porch0', 60), ('L_porch1', 60)):
         bpy.data.objects[n].data.energy = e if night else 4
     door.rotation_euler = (0, 0, math.radians(door_open))
     s = bpy.context.scene
-    s.view_settings.exposure = {'canopy': 0.15, 'cabin': 0.25, 'inside': 1.15, 'brew': 0.55, 'night': 0.7}[name]
+    s.view_settings.exposure = {'canopy': 0.15, 'cabin': 0.25, 'inside': 1.15, 'brew': 0.55, 'night': 1.25}[name]
     vs = s.view_settings
     vs.use_white_balance = name in ('inside', 'brew')
     vs.white_balance_temperature = 3700 if name == 'inside' else 3500
