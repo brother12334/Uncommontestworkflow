@@ -1,1 +1,5 @@
 node_modules/
+cafe-pine-render/assets/
+cafe-pine-render/renders/
+cafe-pine-render/*.blend
+cafe-pine-render/*.blend1
