@@ -286,11 +286,12 @@ def build():
     M['underlay'] = flat('underlay', '#1E1D1C', 0.9)
     M['deck'] = pbr('deck', 'dark_wooden_planks', tile=2.0, hsv=(0.5, 1.0, 1.15), rough=(0.6, 0.9))
     M['black'] = flat('black_metal', '#1A1918', 0.45, 0.2)
-    M['trim'] = pbr('trim', 'dark_planks', tile=1.0, hsv=(0.5, 0.8, 0.8), rough=(0.5, 0.8))
+    M['trim'] = pbr('trim', 'dark_planks', tile=1.0, tint='#6A4630', hsv=(0.5, 0.6, 0.55), rough=(0.55, 0.85))
     M['block'] = pbr('foundation', 'stacked_stone_wall', tile=1.4, hsv=(0.5, 0.35, 0.55), rough=(0.7, 1.0))
     M['glass'] = flat('glass', '#E8EEF0', 0.02, transmission=1.0)
     M['glass'].node_tree.nodes['Principled BSDF'].inputs['IOR'].default_value = 1.5
-    M['walls'] = pbr('walls', 'raw_plank_wall', tile=2.5, rot=(0, math.radians(90), math.radians(90)), rough=(0.55, 0.85))
+    M['walls'] = pbr('walls', 'raw_plank_wall', tile=2.5, rot=(0, math.radians(90), 0), rough=(0.55, 0.85))
+    M['walls_x'] = pbr('walls_x', 'raw_plank_wall', tile=2.5, rot=(math.radians(90), 0, 0), rough=(0.55, 0.85))
     M['ceiling'] = pbr('ceiling', 'roof_planks', tile=2.0, hsv=(0.5, 0.85, 1.15), rough=(0.5, 0.8))
     M['beam'] = pbr('beam', 'dark_planks', tile=1.5, tint='#6A4A30', hsv=(0.5, 1.0, 0.7), rough=(0.45, 0.75))
     M['carpet'] = pbr('carpet', 'dirty_carpet', tile=1.5, tint='#8C9480', hsv=(0.5, 0.5, 0.9), rough=(0.85, 1.0))
@@ -337,7 +338,7 @@ def ground_material():
         r = _img(nt, os.path.join(d, 'Rough.jpg'), True, 'FLAT'); Lk.new(mp.outputs[0], r.inputs[0])
         n = _img(nt, os.path.join(d, 'nor_gl.jpg'), True, 'FLAT'); Lk.new(mp.outputs[0], n.inputs[0])
         return hs.outputs[0], r.outputs[0], n.outputs[0]
-    f = layer('forrest_ground_03', 3.0, (0.5, 1.15, 0.42))
+    f = layer('forrest_ground_03', 3.0, (0.49, 1.35, 0.3))
     g = layer('leafy_grass', 2.5, (0.5, 1.1, 0.42))
     v = layer('gravel', 2.0, (0.5, 0.55, 1.15))
     attr = N.new('ShaderNodeAttribute'); attr.attribute_name = 'mask'
@@ -525,8 +526,8 @@ def build_forest(col, hidden):
         else:
             instance(rng.choice(shrubs), P(x, ground_h(x, z), z), rng.random() * math.tau, rng.uniform(0.7, 1.2), col, 'SHRUB')
     # arborvitae-like conifers along the deck (fir saplings, trimmed small)
-    for x, z, s in ((-0.6, 6.95, 0.2), (1.9, 6.95, 0.22), (4.4, 6.95, 0.21)):
-        instance(saps[0], P(x, ground_h(x, z), z), rng.random() * math.tau, s, col, 'SHRUB_deck')
+    for x, z, s in ((-0.6, 6.85, 1.25), (1.9, 6.85, 1.35), (4.4, 6.85, 1.3), (-6.8, 1.55, 1.2), (-5.2, 1.6, 1.0), (6.95, 1.2, 1.15)):
+        instance(rng.choice(shrubs), P(x, ground_h(x, z), z), rng.random() * math.tau, s, col, 'SHRUB_deck')
     # stump, boulders
     st = link_asset('tree_stump_01/tree_stump_01_1k.blend', kind='objects')
     for o in st:
@@ -850,7 +851,7 @@ def build_cabin(col, M):
     bm = bmesh.new(); bm_box(bm, P(5.02, (RIDGE + 0.7) / 2, -2.5), (0.8, 1.6, RIDGE + 0.7))
     obj_from_bm('CAB_chimney', bm, M['stone'], col)
     bm = bmesh.new(); bm_box(bm, P(5.02, RIDGE + 0.76, -2.5), (1.05, 1.85, 0.12))
-    obj_from_bm('CAB_chimney_cap', bm, flat('capstone', '#77726A', 0.8), col)
+    obj_from_bm('CAB_chimney_cap', bm, flat('capstone', '#4E4B46', 0.85), col)
     return door
 
 def lattice_material():
@@ -909,7 +910,9 @@ def build_interior(col, M, hidden):
     bm_box(bm, P(IN['x0'], F + 1.5, (IN['z0'] + IN['z1']) / 2), (0.04, IN['z1'] - IN['z0'], 3.0))
     for z0, z1, y0, y1 in ((IN['z0'], 1.1, 0, 3.0), (2.3, IN['z1'], 0, 3.0), (1.1, 2.3, 0, 0.9), (1.1, 2.3, 2.0, 3.0)):
         bm_box(bm, P(IN['x1'], F + (y0 + y1) / 2, (z0 + z1) / 2), (0.04, z1 - z0, y1 - y0))
-    walls = obj_from_bm('IN_walls', bm, M['walls'], col)
+    walls = obj_from_bm('IN_walls', bm, [M['walls'], M['walls_x']], col)
+    for p in walls.data.polygons:
+        p.material_index = 1 if abs(p.normal.x) > 0.5 else 0
     # gable triangles above the side-wall line are covered by stepping boxes; add true triangles
     bm = bmesh.new()
     for z in (IN['z1'] - 0.01, IN['z0'] + 0.01):
@@ -1157,6 +1160,7 @@ def build_mug(col, M, at, drink, name='HERO_mug'):
     sp = cu.splines.new('POLY'); sp.points.add(len(path) - 1)
     for i, (x, z) in enumerate(path): sp.points[i].co = (x, 0, z, 1)
     ho = bpy.data.objects.new(name + '_handle', cu); col.objects.link(ho); ho.location = at
+    if name == 'HERO_mug': ho.rotation_euler = (0, 0, math.radians(-110))
     cu.materials.append(M['glaze']); hb.free()
     if drink:
         y = 0.0125; total = 0.102 - 0.0125
@@ -1328,7 +1332,7 @@ def steam_material(at, h):
     Lk.new(ln.outputs['Value'], rf.inputs['Value'])
     m1 = N.new('ShaderNodeMath'); m1.operation = 'MULTIPLY'; Lk.new(sh.outputs['Result'], m1.inputs[0]); Lk.new(zf.outputs['Result'], m1.inputs[1])
     m2 = N.new('ShaderNodeMath'); m2.operation = 'MULTIPLY'; Lk.new(m1.outputs[0], m2.inputs[0]); Lk.new(rf.outputs['Result'], m2.inputs[1])
-    m3 = N.new('ShaderNodeMath'); m3.operation = 'MULTIPLY'; m3.inputs[1].default_value = 9.0; Lk.new(m2.outputs[0], m3.inputs[0])
+    m3 = N.new('ShaderNodeMath'); m3.operation = 'MULTIPLY'; m3.inputs[1].default_value = 30.0; Lk.new(m2.outputs[0], m3.inputs[0])
     Lk.new(m3.outputs[0], vol.inputs['Density'])
     Lk.new(vol.outputs[0], out.inputs['Volume'])
     return m
@@ -1339,9 +1343,9 @@ def build_lights(col):
         L = bpy.data.lights.new(name, 'POINT'); L.energy = watt; L.color = lin(kelvin_hex)[:3]; L.shadow_soft_size = radius
         o = bpy.data.objects.new(name, L); o.location = loc; col.objects.link(o); return o
     F = FLOOR
-    point('L_fire', P(3.25, F + 0.85, -2.5), 220, '#FF8A3D', 0.25)
+    point('L_fire', P(3.25, F + 0.85, -2.5), 220, '#FFA868', 0.25)
     point('L_fire_low', P(3.55, F + 0.55, -2.5), 90, '#FF6A20', 0.2)
-    point('L_lamp', P(0.25, F + 1.05, -0.35), 45, '#FFB877', 0.08)
+    point('L_lamp', P(0.25, F + 1.05, -0.35), 55, '#FFD2A6', 0.08)
     for i, x in enumerate((-2.0, -0.6, 0.8)):
         point(f'L_pend{i}', P(x, F + 2.08, -6.45), 40, '#FFC27A', 0.04)
     point('L_porch0', P(2.2, F + 1.82, Z1 + 0.3), 0, '#FFB46B', 0.04)
@@ -1351,7 +1355,7 @@ def build_lights(col):
     d = P(-0.55, 0.5, 0.67).normalized()  # direction toward the sun: front-left, 30 deg up
     so.rotation_euler = (-d).to_track_quat('-Z', 'Y').to_euler()
     # soft fill bouncing off the ceiling, as a room lit by several lamps would have
-    A_ = bpy.data.lights.new('L_fill', 'AREA'); A_.energy = 60; A_.size = 3.0; A_.color = lin('#FFC890')[:3]
+    A_ = bpy.data.lights.new('L_fill', 'AREA'); A_.energy = 160; A_.size = 4.0; A_.color = lin('#FFE0C0')[:3]
     o = bpy.data.objects.new('L_fill', A_); o.location = P(0.5, F + 2.6, -2.0); o.rotation_euler = (math.pi, 0, 0); col.objects.link(o)
     o.visible_camera = False; o.visible_glossy = False
 
@@ -1389,7 +1393,11 @@ def apply_shot(name, cam, tgt, door):
         bpy.data.objects[n].data.energy = e if night else 4
     door.rotation_euler = (0, 0, math.radians(door_open))
     s = bpy.context.scene
-    s.view_settings.exposure = {'canopy': 0.0, 'cabin': 0.1, 'inside': 0.7, 'brew': 0.2, 'night': 0.7}[name]
+    s.view_settings.exposure = {'canopy': 0.15, 'cabin': 0.25, 'inside': 1.15, 'brew': 0.55, 'night': 0.7}[name]
+    vs = s.view_settings
+    vs.use_white_balance = name in ('inside', 'brew')
+    vs.white_balance_temperature = 3700 if name == 'inside' else 3500
+    vs.white_balance_tint = 0
     # hide the interior from exterior day shots far away (saves memory/time) and the forest inside
     bpy.data.collections['SET_interior'].hide_render = name in ('canopy',)
 
