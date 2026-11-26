@@ -282,6 +282,8 @@ def build():
     M['metal'] = pbr('metal_roof', 'corrugated_iron', tile=1.5, tint='#7FA4A0', hsv=(0.5, 0.4, 1.0), rough=(0.35, 0.6))
     M['metal'].node_tree.nodes['Principled BSDF'].inputs['Metallic'].default_value = 0.6
     M['soffit'] = pbr('soffit', 'roof_planks', tile=2.0, rough=(0.5, 0.8))
+    M['shingle'] = shingle_material()
+    M['underlay'] = flat('underlay', '#1E1D1C', 0.9)
     M['deck'] = pbr('deck', 'dark_wooden_planks', tile=2.0, hsv=(0.5, 1.0, 1.15), rough=(0.6, 0.9))
     M['black'] = flat('black_metal', '#1A1918', 0.45, 0.2)
     M['trim'] = pbr('trim', 'dark_planks', tile=1.0, hsv=(0.5, 0.8, 0.8), rough=(0.5, 0.8))
@@ -365,6 +367,32 @@ def ground_material():
     Lk.new(rgh, bsdf.inputs['Roughness'])
     nm = N.new('ShaderNodeNormalMap'); nm.inputs['Strength'].default_value = 1.2
     Lk.new(nrm, nm.inputs['Color']); Lk.new(nm.outputs[0], bsdf.inputs['Normal'])
+    return m
+
+def shingle_material():
+    m = bpy.data.materials.new('asphalt_shingle'); m.use_nodes = True
+    nt = m.node_tree; N = nt.nodes; Lk = nt.links
+    b = N['Principled BSDF']
+    at = N.new('ShaderNodeAttribute'); at.attribute_name = 'tone'
+    ramp = N.new('ShaderNodeValToRGB')
+    ramp.color_ramp.elements[0].color = lin('#2B2A28'); ramp.color_ramp.elements[1].color = lin('#4A443D')
+    e = ramp.color_ramp.elements.new(0.7); e.color = lin('#3A3530')
+    Lk.new(at.outputs['Fac'], ramp.inputs[0])
+    tc = N.new('ShaderNodeTexCoord')
+    gr = N.new('ShaderNodeTexNoise'); gr.inputs['Scale'].default_value = 900; gr.inputs['Detail'].default_value = 2
+    Lk.new(tc.outputs['Object'], gr.inputs['Vector'])
+    lich = N.new('ShaderNodeTexNoise'); lich.inputs['Scale'].default_value = 6; lich.inputs['Detail'].default_value = 8
+    Lk.new(tc.outputs['Object'], lich.inputs['Vector'])
+    lm = N.new('ShaderNodeMapRange'); lm.inputs['From Min'].default_value = 0.6; lm.inputs['From Max'].default_value = 0.68
+    Lk.new(lich.outputs['Fac'], lm.inputs['Value'])
+    gm = N.new('ShaderNodeMix'); gm.data_type = 'RGBA'; gm.blend_type = 'MULTIPLY'; gm.inputs['Factor'].default_value = 0.35
+    Lk.new(ramp.outputs[0], gm.inputs[6]); Lk.new(gr.outputs['Color'], gm.inputs[7])
+    mx = N.new('ShaderNodeMix'); mx.data_type = 'RGBA'
+    Lk.new(lm.outputs['Result'], mx.inputs['Factor']); Lk.new(gm.outputs[2], mx.inputs[6]); mx.inputs[7].default_value = lin('#6E6A3E')
+    Lk.new(mx.outputs[2], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = 0.88
+    bp = N.new('ShaderNodeBump'); bp.inputs['Strength'].default_value = 0.35; bp.inputs['Distance'].default_value = 0.002
+    Lk.new(gr.outputs['Fac'], bp.inputs['Height']); Lk.new(bp.outputs['Normal'], b.inputs['Normal'])
     return m
 
 def char_material():
@@ -526,8 +554,11 @@ def grass_gn(col, hidden):
     for i, v in enumerate(me_o.data.vertices):
         x, z = v.co.x, -v.co.y
         w = lawn_w(x, z)
-        if -9 < x < 7.2 and -8 < z < 6.6: w = 0
-        if -3.6 < x < -1.8 and 6 < z < 8.6: w = 0
+        if -8.25 < x < 4.75 and -7.25 < z < 4.2: w = 0   # cabin + wing footprint
+        if -4.6 < x < 6.85 and 3.9 < z < 6.3: w = 0      # front deck
+        if 4.4 < x < 6.85 and -0.6 < z < 4.2: w = 0      # right deck
+        if -3.45 < x < -1.95 and 6.2 < z < 8.4: w = 0    # front stairs
+        if 6.7 < x < 8.95 and 2.25 < z < 3.75: w = 0     # right stairs
         if drive_dist(x, z) < 2.0 or seg_dist(x, z, (-6.5, 8.6), (-2.7, 8.6)) < 1.0: w = 0
         dens.data[i].value = w
     ng = bpy.data.node_groups.new('lawn_grass', 'GeometryNodeTree')
@@ -623,14 +654,17 @@ def build_cabin(col, M):
     obj_from_bm('CAB_foundation', bm, M['block'], col)
 
     # roofs
-    def roof(cx, ridge, halfw, eave, z0, z1, over, mat, name):
-        bm = bmesh.new()
+    def roof(cx, ridge, halfw, eave, z0, z1, over, mat, name, shingles):
         pitch = math.atan2(ridge - eave, halfw)
         run = halfw + over
+        slope_len = run / math.cos(pitch)
+        y_len = z1 - z0 + over * 2
+        ymid = -(z0 + z1) / 2
+        top_z = ridge + 0.24
+        bm = bmesh.new()
         for side in (-1, 1):
-            # top surface quad + thickness
             th = 0.16
-            p0 = P(cx, ridge + 0.24, z1 + over); p1 = P(cx, ridge + 0.24, z0 - over)
+            p0 = P(cx, top_z, z1 + over); p1 = P(cx, top_z, z0 - over)
             dx = side * run; dy = -math.tan(pitch) * run
             p2 = p1 + Vector((dx, 0, dy)); p3 = p0 + Vector((dx, 0, dy))
             down = Vector((0, 0, -th))
@@ -638,14 +672,63 @@ def build_cabin(col, M):
             for f in ((0, 1, 2, 3), (7, 6, 5, 4), (0, 3, 7, 4), (1, 5, 6, 2), (3, 2, 6, 7), (0, 4, 5, 1)):
                 bm.faces.new([vs[i] for i in f])
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
-        o = obj_from_bm(name, bm, [mat, M['soffit']], col)
-        for p in o.data.polygons:
+        base = obj_from_bm(name, bm, [M['underlay'] if shingles else mat, M['soffit']], col)
+        for p in base.data.polygons:
             p.material_index = 0 if p.normal.z > 0.3 else 1
+        # surface detail
+        bm = bmesh.new()
+        tone = bm.faces.layers.float.new('tone')
+        for side in (-1, 1):
+            D = Vector((side * math.cos(pitch), 0, -math.sin(pitch)))   # down the slope
+            N = Vector((side * math.sin(pitch), 0, math.cos(pitch)))    # out of the roof
+            Y = Vector((0, 1, 0))
+            R = Vector((cx, ymid, top_z))
+            if shingles:
+                exp, tab_d, th = 0.143, 0.33, 0.011
+                rows = int(slope_len / exp) + 1
+                for k in range(rows):
+                    s_bot = slope_len - k * exp
+                    if s_bot < 0.05: break
+                    y = -y_len / 2 + (rng.random() * 0.15 if k % 2 else 0.18)
+                    y = -y_len / 2 - (0.17 if k % 2 else 0.0)
+                    while y < y_len / 2:
+                        w = rng.uniform(0.24, 0.48)
+                        y0, y1 = max(y, -y_len / 2), min(y + w, y_len / 2)
+                        if y1 - y0 > 0.04:
+                            d = min(tab_d, s_bot)
+                            c = R + D * (s_bot - d / 2) + N * (th * 0.5 + 0.002 + rng.uniform(0, 0.003)) + Y * ((y0 + y1) / 2 - 0.0025)
+                            tilt = Matrix.Rotation(-side * 0.035, 4, 'Y')
+                            m = Matrix.Translation(c) @ tilt @ Matrix((D, Y, N)).transposed().to_4x4() @ Matrix.Diagonal((d, y1 - y0 - 0.005, th, 1))
+                            res = bmesh.ops.create_cube(bm, size=1.0, matrix=m)
+                            tv = rng.random()
+                            for f in {f for v in res['verts'] for f in v.link_faces}:
+                                f[tone] = tv
+                        y += w
+            else:
+                y = -y_len / 2 + 0.2
+                while y < y_len / 2:
+                    c = R + D * (slope_len / 2) + N * 0.018 + Y * y
+                    m = Matrix.Translation(c) @ Matrix((D, Y, N)).transposed().to_4x4() @ Matrix.Diagonal((slope_len, 0.022, 0.036, 1))
+                    bmesh.ops.create_cube(bm, size=1.0, matrix=m)
+                    y += 0.45
+            # fascia along the eave and rake boards along both gable ends
+            eave_c = R + D * slope_len + N * (-0.06)
+            bm_box(bm, eave_c - Vector((0, 0, 0.0)), (0.04, y_len + 0.04, 0.24))
+            for ys in (-y_len / 2, y_len / 2):
+                c = R + D * (slope_len / 2) + N * (-0.04) + Y * ys
+                m = Matrix.Translation(c) @ Matrix((D, Y, N)).transposed().to_4x4() @ Matrix.Diagonal((slope_len, 0.04, 0.24, 1))
+                bmesh.ops.create_cube(bm, size=1.0, matrix=m)
+        det = obj_from_bm(name + '_detail', bm, [M['shingle'] if shingles else mat], col)
+        if shingles:
+            # fascia/rake boards are the last boxes; colour them by giving them the trim material
+            det.data.materials.append(M['trim'])
+            for p in det.data.polygons:
+                if abs(p.normal.z) < 0.2 and (p.area > 0.04): p.material_index = 1
         # ridge cap
         bm = bmesh.new(); bm_box(bm, P(cx, ridge + 0.3, (z0 + z1) / 2), (0.36, z1 - z0 + over * 2, 0.1))
-        obj_from_bm(name + '_cap', bm, M['black'] if mat is M['roof'] else mat, col)
-    roof(0, RIDGE, 4.5, EAVE, Z0, Z1, 0.7, M['roof'], 'CAB_roof')
-    roof(-6.25, WRIDGE, 1.75, WEAVE, WZ0, WZ1, 0.45, M['metal'], 'CAB_roof_wing')
+        obj_from_bm(name + '_cap', bm, M['shingle'] if shingles else mat, col)
+    roof(0, RIDGE, 4.5, EAVE, Z0, Z1, 0.7, M['roof'], 'CAB_roof', True)
+    roof(-6.25, WRIDGE, 1.75, WEAVE, WZ0, WZ1, 0.45, M['metal'], 'CAB_roof_wing', False)
 
     # windows, door, trim
     bm_t = bmesh.new(); bm_g = bmesh.new()
@@ -1079,18 +1162,176 @@ def build_mug(col, M, at, drink, name='HERO_mug'):
         y = 0.0125; total = 0.102 - 0.0125
         layers = RECIPES[drink]
         for k, (liq, frac) in enumerate(layers):
-            colr = LIQ[liq]
-            m = flat(f'liq_{drink}_{k}', colr, 0.95 if liq == 'foam' else 0.25, coat=0.3 if liq != 'foam' else 0)
-            if liq == 'foam' and k > 0:
-                b = m.node_tree.nodes['Principled BSDF']
-                c1, c2 = lin(LIQ['foam']), lin(LIQ[layers[k - 1][0]])
-                b.inputs['Base Color'].default_value = tuple(c1[i] * 0.7 + c2[i] * 0.3 for i in range(3)) + (1,)
             lb = bmesh.new()
-            bmesh.ops.create_cone(lb, cap_ends=True, segments=48, radius1=0.0384, radius2=0.0386, depth=frac * total)
+            bmesh.ops.create_cone(lb, cap_ends=True, segments=48, radius1=0.0384, radius2=0.0386, depth=frac * total - 0.0004)
             bmesh.ops.translate(lb, verts=lb.verts, vec=at + Vector((0, 0, y + frac * total / 2)))
-            obj_from_bm(f'{name}_liq{k}', lb, m, col, smooth=True)
+            obj_from_bm(f'{name}_liq{k}', lb, flat(f'liq_{drink}_{k}', LIQ[liq], 0.3), col, smooth=True)
             y += frac * total
+        coffee_top(col, at, y, drink, name)
     return mug
+
+def latte_art(path):
+    """Rosetta pattern as a soft white mask on black (1 = white microfoam)."""
+    from PIL import Image, ImageDraw, ImageFilter
+    S = 1024
+    im = Image.new('L', (S, S), 0); d = ImageDraw.Draw(im)
+    cx = S * 0.5
+    # stacked leaves of the rosetta, widest at the bottom
+    for i in range(10):
+        t = i / 9
+        yc = S * (0.74 - t * 0.5)
+        w = S * (0.34 - t * 0.22)
+        h = S * (0.085 - t * 0.03)
+        d.ellipse([cx - w, yc - h, cx + w, yc + h], fill=235)
+        d.ellipse([cx - w * 0.9, yc - h - S * 0.024, cx + w * 0.9, yc + h - S * 0.03], fill=0)
+    # heart-shaped head and the pull-through line
+    d.ellipse([cx - S * 0.075, S * 0.17, cx + S * 0.075, S * 0.29], fill=240)
+    d.line([(cx, S * 0.13), (cx, S * 0.86)], fill=0, width=int(S * 0.012))
+    im = im.filter(ImageFilter.GaussianBlur(6))
+    # streaks so the art reads as poured milk, not a stencil
+    px = im.load()
+    rr = random.Random(5)
+    for _ in range(2500):
+        x, yy = rr.randrange(S), rr.randrange(S)
+        if px[x, yy] > 60:
+            for k in range(rr.randrange(6, 30)):
+                if 0 <= x + k < S: px[x + k, yy] = max(0, px[x + k, yy] - 40)
+    im = im.filter(ImageFilter.GaussianBlur(2))
+    im.save(path)
+
+def coffee_top(col, at, h, drink, name):
+    R = 0.0388
+    gen = os.path.join(A, 'generated'); os.makedirs(gen, exist_ok=True)
+    art = os.path.join(gen, 'rosetta.png')
+    if not os.path.exists(art): latte_art(art)
+    # surface disc with a meniscus climbing the wall
+    bm = bmesh.new(); uvl = bm.loops.layers.uv.verify()
+    rings, segs = 24, 72
+    center = bm.verts.new(at + Vector((0, 0, h)))
+    grid = []
+    for i in range(1, rings + 1):
+        r = R * i / rings
+        dz = 0.0018 * (i / rings) ** 10
+        grid.append([bm.verts.new(at + Vector((r * math.cos(a), r * math.sin(a), h + dz))) for a in (math.tau * j / segs for j in range(segs))])
+    for j in range(segs):
+        f = bm.faces.new((center, grid[0][j], grid[0][(j + 1) % segs]))
+    for i in range(rings - 1):
+        for j in range(segs):
+            bm.faces.new((grid[i][j], grid[i + 1][j], grid[i + 1][(j + 1) % segs], grid[i][(j + 1) % segs]))
+    for f in bm.faces:
+        for lp in f.loops:
+            v = lp.vert.co - at
+            lp[uvl].uv = (v.x / (2 * R) + 0.5, v.y / (2 * R) + 0.5)
+    top = obj_from_bm(f'{name}_surface', bm, coffee_material(drink, art), col, smooth=True)
+    # bubbles: clustered at the rim, a few drifting on the surface
+    bm = bmesh.new()
+    rr = random.Random(hash(drink) & 0xffff)
+    n = 70 if drink == 'drip' else 170
+    for i in range(n):
+        if rr.random() < 0.8:
+            rad = R * (0.86 + rr.random() * 0.12)
+        else:
+            rad = R * math.sqrt(rr.random()) * 0.85
+        a = rr.random() * math.tau
+        size = 0.0003 + rr.random() ** 3 * 0.0011
+        zc = h + 0.0018 * (rad / R) ** 10 + size * 0.25
+        res = bmesh.ops.create_icosphere(bm, subdivisions=2, radius=size)
+        bmesh.ops.translate(bm, verts=res['verts'], vec=at + Vector((rad * math.cos(a), rad * math.sin(a), zc)))
+    bub = flat(f'bubble_{drink}', '#F4E8D6' if drink != 'drip' else '#C8A070', 0.02, transmission=0.85)
+    bub.node_tree.nodes['Principled BSDF'].inputs['IOR'].default_value = 1.33
+    obj_from_bm(f'{name}_bubbles', bm, bub, col, smooth=True)
+    # steam: a thin, noisy volume rising off the cup
+    bm = bmesh.new(); bm_box(bm, at + Vector((0, 0, h + 0.11)), (0.1, 0.1, 0.2))
+    obj_from_bm(f'{name}_steam', bm, steam_material(at, h), col)
+
+def coffee_material(drink, art):
+    m = bpy.data.materials.new(f'coffee_top_{drink}'); m.use_nodes = True
+    nt = m.node_tree; N = nt.nodes; Lk = nt.links
+    b = N['Principled BSDF']
+    tc = N.new('ShaderNodeTexCoord')
+    if drink == 'drip':
+        b.inputs['Base Color'].default_value = lin('#120904'); b.inputs['Roughness'].default_value = 0.03
+        b.inputs['Coat Weight'].default_value = 0.6
+        return m
+    foam = {'latte': '#F3E9DA', 'capp': '#F5EEE2', 'cortado': '#E2CDB0', 'matcha': '#B8C98A', 'chai': '#E8D4B8'}[drink]
+    crema = {'latte': '#A86A35', 'capp': '#B8834E', 'cortado': '#9A6232', 'matcha': '#7E9A3E', 'chai': '#B07A45'}[drink]
+    # radial distance for the crema ring at the rim
+    sep = N.new('ShaderNodeSeparateXYZ'); Lk.new(tc.outputs['UV'], sep.inputs[0])
+    vx = N.new('ShaderNodeMath'); vx.operation = 'SUBTRACT'; vx.inputs[1].default_value = 0.5; Lk.new(sep.outputs['X'], vx.inputs[0])
+    vy = N.new('ShaderNodeMath'); vy.operation = 'SUBTRACT'; vy.inputs[1].default_value = 0.5; Lk.new(sep.outputs['Y'], vy.inputs[0])
+    cmb = N.new('ShaderNodeCombineXYZ'); Lk.new(vx.outputs[0], cmb.inputs['X']); Lk.new(vy.outputs[0], cmb.inputs['Y'])
+    ln = N.new('ShaderNodeVectorMath'); ln.operation = 'LENGTH'; Lk.new(cmb.outputs[0], ln.inputs[0])
+    if drink == 'latte':
+        img = N.new('ShaderNodeTexImage'); img.image = bpy.data.images.load(art, check_existing=True); img.image.colorspace_settings.name = 'Non-Color'
+        img.extension = 'CLIP'
+        Lk.new(tc.outputs['UV'], img.inputs[0])
+        mask = img.outputs['Color']
+    else:
+        # cappuccino/others: a white dome of foam with a thin crema rim
+        mr = N.new('ShaderNodeMapRange'); mr.inputs['From Min'].default_value = 0.47; mr.inputs['From Max'].default_value = 0.38
+        Lk.new(ln.outputs['Value'], mr.inputs['Value']); mask = mr.outputs['Result']
+    nz = N.new('ShaderNodeTexNoise'); nz.inputs['Scale'].default_value = 140; nz.inputs['Detail'].default_value = 6
+    Lk.new(tc.outputs['Object'], nz.inputs['Vector'])
+    cr = N.new('ShaderNodeMix'); cr.data_type = 'RGBA'
+    Lk.new(nz.outputs['Fac'], cr.inputs['Factor']); cr.inputs[6].default_value = lin(crema); cr.inputs[7].default_value = lin('#D2A270')
+    mx = N.new('ShaderNodeMix'); mx.data_type = 'RGBA'
+    Lk.new(mask, mx.inputs['Factor']); Lk.new(cr.outputs[2], mx.inputs[6]); mx.inputs[7].default_value = lin(foam)
+    if drink == 'chai':
+        sp = N.new('ShaderNodeTexVoronoi'); sp.inputs['Scale'].default_value = 260
+        Lk.new(tc.outputs['Object'], sp.inputs['Vector'])
+        th = N.new('ShaderNodeMath'); th.operation = 'LESS_THAN'; th.inputs[1].default_value = 0.08
+        Lk.new(sp.outputs['Distance'], th.inputs[0])
+        cin = N.new('ShaderNodeMix'); cin.data_type = 'RGBA'
+        Lk.new(th.outputs[0], cin.inputs['Factor']); Lk.new(mx.outputs[2], cin.inputs[6]); cin.inputs[7].default_value = lin('#6A3A1A')
+        Lk.new(cin.outputs[2], b.inputs['Base Color'])
+    else:
+        Lk.new(mx.outputs[2], b.inputs['Base Color'])
+    b.inputs['Roughness'].default_value = 0.32
+    b.inputs['Subsurface Weight'].default_value = 0.35
+    b.inputs['Subsurface Scale'].default_value = 0.002
+    b.inputs['Coat Weight'].default_value = 0.15
+    # microfoam: tiny dimpled cells plus a few larger open bubbles
+    v1 = N.new('ShaderNodeTexVoronoi'); v1.inputs['Scale'].default_value = 2600
+    v2 = N.new('ShaderNodeTexVoronoi'); v2.inputs['Scale'].default_value = 700
+    Lk.new(tc.outputs['Object'], v1.inputs['Vector']); Lk.new(tc.outputs['Object'], v2.inputs['Vector'])
+    pw = N.new('ShaderNodeMath'); pw.operation = 'POWER'; pw.inputs[1].default_value = 0.5
+    Lk.new(v2.outputs['Distance'], pw.inputs[0])
+    hsum = N.new('ShaderNodeMath'); hsum.operation = 'MULTIPLY_ADD'; hsum.inputs[1].default_value = 0.6
+    Lk.new(v1.outputs['Distance'], hsum.inputs[0]); Lk.new(pw.outputs[0], hsum.inputs[2])
+    bp = N.new('ShaderNodeBump'); bp.inputs['Strength'].default_value = 0.25; bp.inputs['Distance'].default_value = 0.0004
+    Lk.new(hsum.outputs[0], bp.inputs['Height']); Lk.new(bp.outputs['Normal'], b.inputs['Normal'])
+    return m
+
+def steam_material(at, h):
+    m = bpy.data.materials.new('steam'); m.use_nodes = True
+    nt = m.node_tree; N = nt.nodes; Lk = nt.links
+    N.remove(N['Principled BSDF'])
+    out = N['Material Output']
+    vol = N.new('ShaderNodeVolumePrincipled'); vol.inputs['Color'].default_value = (1, 1, 1, 1); vol.inputs['Anisotropy'].default_value = 0.4
+    tc = N.new('ShaderNodeTexCoord')
+    sep = N.new('ShaderNodeSeparateXYZ'); Lk.new(tc.outputs['Object'], sep.inputs[0])
+    # rising, twisting wisps: noise stretched vertically and warped
+    mp = N.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (60, 60, 22)
+    Lk.new(tc.outputs['Object'], mp.inputs['Vector'])
+    nz = N.new('ShaderNodeTexNoise'); nz.inputs['Detail'].default_value = 5; nz.inputs['Distortion'].default_value = 2.5
+    Lk.new(mp.outputs[0], nz.inputs['Vector'])
+    sh = N.new('ShaderNodeMapRange'); sh.inputs['From Min'].default_value = 0.55; sh.inputs['From Max'].default_value = 0.75
+    Lk.new(nz.outputs['Fac'], sh.inputs['Value'])
+    # fade with height above the cup and toward the sides
+    zf = N.new('ShaderNodeMapRange'); zf.inputs['From Min'].default_value = at.z + h + 0.15; zf.inputs['From Max'].default_value = at.z + h
+    Lk.new(sep.outputs['Z'], zf.inputs['Value'])
+    xy = N.new('ShaderNodeCombineXYZ'); Lk.new(sep.outputs['X'], xy.inputs['X']); Lk.new(sep.outputs['Y'], xy.inputs['Y'])
+    sub = N.new('ShaderNodeVectorMath'); sub.operation = 'SUBTRACT'; sub.inputs[1].default_value = (at.x, at.y, 0)
+    Lk.new(xy.outputs[0], sub.inputs[0])
+    ln = N.new('ShaderNodeVectorMath'); ln.operation = 'LENGTH'; Lk.new(sub.outputs[0], ln.inputs[0])
+    rf = N.new('ShaderNodeMapRange'); rf.inputs['From Min'].default_value = 0.045; rf.inputs['From Max'].default_value = 0.01
+    Lk.new(ln.outputs['Value'], rf.inputs['Value'])
+    m1 = N.new('ShaderNodeMath'); m1.operation = 'MULTIPLY'; Lk.new(sh.outputs['Result'], m1.inputs[0]); Lk.new(zf.outputs['Result'], m1.inputs[1])
+    m2 = N.new('ShaderNodeMath'); m2.operation = 'MULTIPLY'; Lk.new(m1.outputs[0], m2.inputs[0]); Lk.new(rf.outputs['Result'], m2.inputs[1])
+    m3 = N.new('ShaderNodeMath'); m3.operation = 'MULTIPLY'; m3.inputs[1].default_value = 9.0; Lk.new(m2.outputs[0], m3.inputs[0])
+    Lk.new(m3.outputs[0], vol.inputs['Density'])
+    Lk.new(vol.outputs[0], out.inputs['Volume'])
+    return m
 
 # ---------------------------------------------------------------- lights
 def build_lights(col):
@@ -1158,6 +1399,8 @@ def main():
     ap.add_argument('--scale', type=int, default=100)
     ap.add_argument('--samples', type=int, default=96)
     ap.add_argument('--save', action='store_true')
+    ap.add_argument('--force', action='store_true')
+    ap.add_argument('--push', action=argparse.BooleanOptionalAction, default=True)
     args = ap.parse_args([a for a in sys.argv[1:] if a.startswith('--') or not a.endswith('.py')])
     t0 = time.time()
     M = build()
@@ -1169,11 +1412,39 @@ def main():
     if args.save:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.join(HERE, 'scene.blend'))
     for name in args.shots.split(','):
+        out = os.path.join(OUT, f'test_{name}.png')
+        if os.path.exists(out) and not args.force:
+            print(f'skip {name}: already rendered', flush=True); continue
         apply_shot(name, cam, tgt, door)
-        bpy.context.scene.render.filepath = os.path.join(OUT, f'test_{name}.png')
+        tmp = os.path.join(OUT, f'.tmp_{name}.png')
+        bpy.context.scene.render.filepath = tmp
         t1 = time.time()
         bpy.ops.render.render(write_still=True)
+        os.replace(tmp, out)
         print(f'rendered {name} in {time.time() - t1:.1f}s', flush=True)
+        save_and_push(out, args.push)
+
+def save_and_push(png, push):
+    """Keep a web copy of every finished frame and push it, so nothing is lost if the run stops."""
+    import subprocess
+    from PIL import Image
+    web = os.path.join(HERE, 'frames_web'); os.makedirs(web, exist_ok=True)
+    dst = os.path.join(web, os.path.basename(png).replace('.png', '.webp'))
+    Image.open(png).convert('RGB').save(dst, 'WEBP', quality=86, method=6)
+    if not push: return
+    repo = os.path.dirname(HERE)
+    msg = (f'Render {os.path.basename(dst)}\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>\n'
+           'Claude-Session: https://claude.ai/code/session_01DDE6rdUDakZHgTseGkFEqk')
+    try:
+        subprocess.run(['git', '-C', repo, 'add', dst], check=True, capture_output=True)
+        subprocess.run(['git', '-C', repo, 'commit', '-m', msg], check=True, capture_output=True)
+        for attempt in range(4):
+            r = subprocess.run(['git', '-C', repo, 'push', '-u', 'origin', 'HEAD'], capture_output=True)
+            if r.returncode == 0: break
+            time.sleep(2 ** (attempt + 1))
+        print(f'pushed {os.path.basename(dst)}', flush=True)
+    except Exception as e:
+        print('push skipped:', e, flush=True)
 
 if __name__ == '__main__':
     main()
